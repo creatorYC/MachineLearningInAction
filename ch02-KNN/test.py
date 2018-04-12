@@ -16,4 +16,7 @@ from numpy import *
 # plt.xlabel(u'每年获取的飞行常客里程数')
 # plt.ylabel(u'玩视频游戏所耗时间百分比')
 # plt.show()
-kNN.classifyPerson()
+# kNN.classifyPerson()
+# testVector = kNN.img2vector('testDigits/0_13.txt')
+# print(testVector[0, 0:31])
+kNN.handwritingClassTest()
