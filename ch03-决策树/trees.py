@@ -93,3 +93,42 @@ def createTree(dataSet, labels):
         nextDataSet = splitDataSet(dataSet, bestFeature, value)
         myTree[bestFeatureLabel][value] = createTree(nextDataSet, subLabels)
     return myTree
+
+
+# 使用决策树的分类函数
+def classify(inTree, featureLabels, testVect):
+    firstStr = list(inTree.keys())[0]
+    secondDict = inTree[firstStr]
+    featureIndex = featureLabels.index(firstStr)  # 将标签字符串转换为索引
+    for key in secondDict.keys():
+        if testVect[featureIndex] == key:
+            if type(secondDict[key]).__name__ == 'dict':
+                classLabel = classify(secondDict[key], featureLabels, testVect)
+            else:
+                classLabel = secondDict[key]  # 叶子节点，返回当前节点的分类标签
+    return classLabel
+
+
+# 使用pickle模块存储决策树
+def storeTree(inTree, filename):
+    import pickle
+    fw = open(filename, 'w')
+    pickle.dump(inTree, fw)
+    fw.close()
+
+
+# 读取决策树
+def grabTree(filename):
+    import pickle
+    fr = open(filename)
+    return pickle.load(fr)
+
+
+# 使用决策树预测隐形眼镜类型
+if __name__ == '__main__':
+    import treePlotter
+    fr = open('lenses.txt')
+    lenses = [inst.strip().split('\t') for inst in fr.readlines()]
+    lensesLabels = ['age', 'prescript', 'astigmatic', 'tearRate']
+    lensesTree = createTree(lenses, lensesLabels)
+    treePlotter.createPlot(lensesTree)
