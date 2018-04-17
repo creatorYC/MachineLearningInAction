@@ -93,7 +93,7 @@ def testingNaiveBayes():
 
 # ---------------- 使用朴素贝叶斯对电子邮件进行分类 ---------------------------
 # 切分英语文本
-def getContentTokens(content):
+def textParser(content):
     import re
     regex = re.compile(r'\W*')
     listOfTokens = regex.split(content)
@@ -106,11 +106,11 @@ def testNaiveBayesToSpamEmail():
     emails_class = []
     for i in range(1, 26):
         # 垃圾邮件样本
-        wordList = getContentTokens(open('email/spam/%d.txt' % i).read())
+        wordList = textParser(open('email/spam/%d.txt' % i).read())
         emails.append(wordList)
         emails_class.append(1)
         # 正常邮件样本
-        wordList = getContentTokens(open('email/ham/%d.txt' % i).read())
+        wordList = textParser(open('email/ham/%d.txt' % i).read())
         emails.append(wordList)
         emails_class.append(0)
     
@@ -137,10 +137,109 @@ def testNaiveBayesToSpamEmail():
         if classifyNaiveBayes(array(wordVect), p0V, p1V, pSpam) != emails_class[index]:
             errorCount += 1
     print('the error rate is: ', 1.0*errorCount/len(testSet))
+
+
+# --------------------- 使用朴素贝叶斯分类器从个人广告中获取区域倾向 -------------------
+# 计算词的出现频率
+def calcMostFreq(vocabList, fullText, topN):
+    import operator
+    freqDict = {}
+    for token in vocabList:
+        freqDict[token] = fullText.count(token)
+    sortedFreq = sorted(
+        freqDict.items(),
+        key=operator.itemgetter(1),
+        reverse=True
+    )
+    return sortedFreq[:topN]
     
+
+def getLocalWords(feed1, feed0):
+    summaryList = []
+    summaries_class = []
+    fullText = []
+    minLen = min(len(feed1['entries']), len(feed0['entries']))
+    for i in range(minLen):
+        # 第一个feed, 例子中为New York
+        # 每次访问一条RSS源
+        wordList = textParser(feed1['entries'][i]['summary'])
+        summaryList.append(wordList)
+        fullText.extend(wordList)
+        summaries_class.append(1)
+        # 第二个feed
+        wordList = textParser(feed0['entries'][i]['summary'])
+        summaryList.append(wordList)
+        fullText.extend(wordList)
+        summaries_class.append(0)
+    vocabList = createVocabList(summaryList)
+
+    # 停用词表: 语言中作为冗余/结构辅助性内容的词语表
+    # 多语言停用词表例子 www.ranks.nl/resources/stopwords.html
+    topN = 30
+    topNWords = calcMostFreq(vocabList, fullText, topN)
+    # 去除出现次数最多的N个词
+    for word, _ in topNWords:
+        if word in vocabList:
+            vocabList.remove(word)
+    # 随机生成训练集和测试集
+    trainingSet = list(range(2*minLen))
+    testSet = []
+    for i in range(20):
+        randIndex = int(random.uniform(0, len(trainingSet)))
+        testSet.append(trainingSet[randIndex])
+        del(trainingSet[randIndex])
+    trainMat = []
+    trainClasses = []
+    for index in trainingSet:
+        trainMat.append(bagOfWords2Vec(vocabList, summaryList[index]))
+        trainClasses.append(summaries_class[index])
+    p0V, p1V, pSpam = trainNaiveBayes0(array(trainMat), array(trainClasses))
+    errorCount = 0
+    for index in testSet:
+        wordVect = bagOfWords2Vec(vocabList, summaryList[index])
+        if classifyNaiveBayes(array(wordVect), p0V, p1V, pSpam) != summaries_class[index]:
+            errorCount += 1
+    print('the error rate is: ', 1.0*errorCount/len(testSet))
+    return vocabList, p0V, p1V        
+
+
+# 最具表征性的词汇显示函数
+def getTopWords(ny, sf):
+    import operator
+    vocabList, p0V, p1V = getLocalWords(ny, sf)
+    THRESHOLD = -6.0
+    topNY = []
+    topSF = []
+    for i in range(len(p0V)):
+        if p0V[i] > THRESHOLD:
+            topSF.append((vocabList[i], p0V[i]))
+        if p1V[i] > THRESHOLD:
+            topNY.append((vocabList[i], p1V[i]))
+    sortedSF = sorted(
+        topSF,
+        key=operator.itemgetter(1),
+        reverse=True
+    )
+    print('-------  SF  -------')
+    for item in sortedSF:
+        print item[0]
+
+    sortedNY = sorted(
+        topNY,
+        key=operator.itemgetter(1),
+        reverse=True
+    )
+    print('-------  NY  -------')
+    for item in sortedNY:
+        print item[0]
+
 
 if __name__ == '__main__':
     # testingNaiveBayes()
-    testNaiveBayesToSpamEmail()
-
+    # testNaiveBayesToSpamEmail()
+    import feedparser
+    ny = feedparser.parse('http://newyork.craigslist.org/search/stp?format=rss')
+    sf = feedparser.parse('http://sfbay.craigslist.org/search/stp?format=rss')
+    vocabList, pSF, pNY = getLocalWords(ny, sf)
+    getTopWords(ny, sf)
 
