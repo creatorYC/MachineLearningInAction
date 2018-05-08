@@ -120,9 +120,162 @@ def simpleSMO(dataMatIn, classLabels, C, toler, maxIter):
     return b, alphas
 
 
+class optStruct(object):
+    def __init__(self, dataMatIn, classLabels, C, toler):
+        self.X = dataMatIn
+        self.labelMat = classLabels
+        self.C = C
+        self.toler = toler
+        self.m = shape(dataMatIn)[0]
+        self.alphas = mat(zeros((self.m, 1)))
+        self.b = 0
+        # eCache 第一列是eCache是否有效的标志位，第二列是实际的E值
+        self.eCache = mat(zeros((self.m, 2)))
+
+
+def calcEk(optS, k):
+    fXk = float(
+        multiply(optS.alphas, optS.labelMat).T
+        * (optS.X * optS.X[k, :].T)
+    ) + optS.b
+    Ek = fXk - float(optS.labelMat[k])
+    return Ek
+
+
+def selectJ(i, optS, Ei):
+    maxK = -1
+    maxDeltaE = 0
+    Ej = 0
+    optS.eCache[i] = [1, Ei]    # 设置第i个eCache缓存值
+    # nonzeros(a)返回数组a中值不为零的元素的下标,返回值为元组， 
+    # 两个值分别为两个维度， 包含了相应维度上非零元素的下标值
+    # .A 代表将矩阵转化为array数组类型
+    validEcacheList = nonzero(optS.eCache[:, 0].A)[0]
+    if len(validEcacheList) > 1:
+        # 在有效的缓存值中寻找deltaE最大的
+        for k in validEcacheList:
+            if k == i:
+                continue
+            Ek = calcEk(optS, k)
+            deltaE = abs(Ei - Ek)
+            if deltaE > maxDeltaE:
+                maxK = k
+                maxDeltaE = deltaE
+                Ej = Ek
+        return maxK, Ej
+    else:
+        # 没有任何有效的eCache缓存值 (如第一轮中)
+        j = randomSelectJ(i, optS.m)
+        Ej = calcEk(optS, j)
+    return j, Ej
+
+
+def updateEk(optS, k):
+    Ek = calcEk(optS, k)
+    optS.eCache[k] = [1, Ek]
+
+
+def innerL(i, optS):
+    # 计算 alpha[i] 的预测值, 估算其是否可以被优化
+    Ei = calcEk(optS, i)
+    if ((optS.labelMat[i]*Ei<-optS.toler) and (optS.alphas[i]<optS.C) or
+        (optS.labelMat[i]*Ei>optS.toler) and (optS.alphas[i]>0)):
+        j, Ej = selectJ(i, optS, Ei)
+        alphaIold = optS.alphas[i].copy()
+        alphaJold = optS.alphas[j].copy()
+        if (optS.labelMat[i] != optS.labelMat[j]):
+            L = max(0, optS.alphas[j]-optS.alphas[i])
+            H = min(optS.C, optS.C+optS.alphas[j]-optS.alphas[i])
+        else:
+            L = max(0, optS.alphas[j]+optS.alphas[i]-optS.C)
+            H = min(optS.C, optS.alphas[j]+optS.alphas[i])
+        if L == H:
+            print("L == H")
+            return 0
+        delta = (
+            2.0 * optS.X[i,:] * optS.X[j,:].T
+            - optS.X[i,:] * optS.X[i,:].T
+            - optS.X[j,:] * optS.X[j,:].T
+        )
+        if delta >= 0:
+            print("delta >= 0")
+            return 0
+        optS.alphas[j] -= optS.labelMat[j] * (Ei - Ej) / delta
+        optS.alphas[j] = adjustAlpha(optS.alphas[j], H, L)
+        updateEk(optS, j)
+        if (abs(optS.alphas[j]-alphaJold) < 0.00001):
+            print("j not moving enough.")
+            return 0
+        optS.alphas[i] += optS.labelMat[j]*optS.labelMat[i]*(alphaJold-optS.alphas[j])
+        updateEk(optS, i)
+        b1 = (
+            optS.b - Ei
+            - optS.labelMat[i]*(optS.alphas[i]-alphaIold)*optS.X[i,:]*optS.X[i,:].T
+            - optS.labelMat[j]*(optS.alphas[j]-alphaJold)*optS.X[i,:]*optS.X[j,:].T
+        )
+        b2 = (
+            optS.b - Ej
+            - optS.labelMat[i]*(optS.alphas[i]-alphaIold)*optS.X[i,:]*optS.X[j,:].T
+            - optS.labelMat[j]*(optS.alphas[j]-alphaJold)*optS.X[j,:]*optS.X[j,:].T
+        )
+        if 0 < optS.alphas[i] < optS.C:
+            optS.b = b1
+        elif 0 < optS.alphas[j] < optS.C:
+            optS.b = b2
+        else:
+            optS.b = (b1 + b2) / 2.0
+        return 1
+    else:
+        return 0
+
+
+def smoP(dataMatIn, classLabels, C, toler, maxIter, kTup=('lin', 0)):
+    optS = optStruct(mat(dataMatIn), mat(classLabels).T, C, toler)
+    iter = 0
+    entireSet = True
+    alphaPairsChanged = 0
+    while (iter<maxIter) and ((alphaPairsChanged>0) or entireSet):
+        alphaPairsChanged = 0
+        if entireSet:
+            # 遍历alpha, 使用 innerL 选择 alpha-j, 并在可能是对其进行优化
+            for i in range(optS.m):
+                alphaPairsChanged += innerL(i, optS)
+                print("fullSet, iter: %d i: %d, pairsChanged: %d" % (iter, i, alphaPairsChanged))
+            iter += 1
+        else:
+            # 遍历所有非边界(不在边界0或C上)的 alpha
+            nonBoundIs = nonzero((optS.alphas.A > 0) * (optS.alphas.A < C))[0]
+            for i in nonBoundIs:
+                alphaPairsChanged += innerL(i, optS)
+                print("non-bound, iter: %d i: %d, pairsChanged: %d" % (iter, i, alphaPairsChanged))
+            iter += 1
+        if entireSet:
+            entireSet = False
+        elif alphaPairsChanged == 0:
+            entireSet = True
+        else:
+            print("iteration number: %d" % iter)
+    return optS.b, optS.alphas
+
+
+def calcWs(alphas, dataArr, classLabels):
+    X = mat(dataArr)
+    labelMat = mat(classLabels).T
+    m, n = shape(X)
+    w = zeros((n, 1))
+    for i in range(m):
+        w += multiply(alphas[i]*labelMat[i], X[i,:].T)
+    return w
+
+
 if __name__ == '__main__':
     dataArr, labelArr = loadDataSet('testSet.txt')
     # print(labelArr)
-    b, alphas = simpleSMO(dataArr, labelArr, 0.6, 0.001, 40)
-    print(b)
-    print(alphas[alphas>0])
+    b, alphas = smoP(dataArr, labelArr, 0.6, 0.001, 40)
+    # print(b)
+    # print(alphas[alphas>0])
+    ws = calcWs(alphas, dataArr, labelArr)
+    # 对数据进行分类
+    dataMat = mat(dataArr)
+    print(dataMat[0]*mat(ws)+b)
+    print(labelArr[0])
