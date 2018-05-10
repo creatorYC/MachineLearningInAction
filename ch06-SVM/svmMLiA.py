@@ -120,8 +120,24 @@ def simpleSMO(dataMatIn, classLabels, C, toler, maxIter):
     return b, alphas
 
 
+# 核函数
+def kernelTrans(X, A, kTup):
+    m, n = shape(X)
+    K = mat(zeros((m, 1)))
+    if kTup[0] == 'lin':     # linear kernel
+        K = X * A.T
+    elif kTup[0] == 'rbf':  # radial basis function
+        for j in range(m):
+            deltaRow = X[j, :] - A
+            K[j] = deltaRow * deltaRow.T
+        K = exp(K / (-1 * kTup[1]**2))
+    else:
+        raise NameError('kernel function not recognized.')
+    return K
+
+
 class optStruct(object):
-    def __init__(self, dataMatIn, classLabels, C, toler):
+    def __init__(self, dataMatIn, classLabels, C, toler, kTup):
         self.X = dataMatIn
         self.labelMat = classLabels
         self.C = C
@@ -131,12 +147,14 @@ class optStruct(object):
         self.b = 0
         # eCache 第一列是eCache是否有效的标志位，第二列是实际的E值
         self.eCache = mat(zeros((self.m, 2)))
+        self.K = mat(zeros((self.m, self.m)))
+        for i in range(self.m):
+            self.K[:, i] = kernelTrans(self.X, self.X[i, :], kTup)
 
 
 def calcEk(optS, k):
     fXk = float(
-        multiply(optS.alphas, optS.labelMat).T
-        * (optS.X * optS.X[k, :].T)
+        multiply(optS.alphas, optS.labelMat).T * optS.K[:, k]
     ) + optS.b
     Ek = fXk - float(optS.labelMat[k])
     return Ek
@@ -193,9 +211,7 @@ def innerL(i, optS):
             print("L == H")
             return 0
         delta = (
-            2.0 * optS.X[i,:] * optS.X[j,:].T
-            - optS.X[i,:] * optS.X[i,:].T
-            - optS.X[j,:] * optS.X[j,:].T
+            2.0 * optS.K[i, j] - optS.K[i, i] - optS.K[j, j]
         )
         if delta >= 0:
             print("delta >= 0")
@@ -210,13 +226,13 @@ def innerL(i, optS):
         updateEk(optS, i)
         b1 = (
             optS.b - Ei
-            - optS.labelMat[i]*(optS.alphas[i]-alphaIold)*optS.X[i,:]*optS.X[i,:].T
-            - optS.labelMat[j]*(optS.alphas[j]-alphaJold)*optS.X[i,:]*optS.X[j,:].T
+            - optS.labelMat[i]*(optS.alphas[i]-alphaIold)*optS.K[i, i]
+            - optS.labelMat[j]*(optS.alphas[j]-alphaJold)*optS.K[i, j]
         )
         b2 = (
             optS.b - Ej
-            - optS.labelMat[i]*(optS.alphas[i]-alphaIold)*optS.X[i,:]*optS.X[j,:].T
-            - optS.labelMat[j]*(optS.alphas[j]-alphaJold)*optS.X[j,:]*optS.X[j,:].T
+            - optS.labelMat[i]*(optS.alphas[i]-alphaIold)*optS.K[i, j]
+            - optS.labelMat[j]*(optS.alphas[j]-alphaJold)*optS.K[j, j]
         )
         if 0 < optS.alphas[i] < optS.C:
             optS.b = b1
@@ -230,7 +246,7 @@ def innerL(i, optS):
 
 
 def smoP(dataMatIn, classLabels, C, toler, maxIter, kTup=('lin', 0)):
-    optS = optStruct(mat(dataMatIn), mat(classLabels).T, C, toler)
+    optS = optStruct(mat(dataMatIn), mat(classLabels).T, C, toler, kTup)
     iter = 0
     entireSet = True
     alphaPairsChanged = 0
@@ -268,14 +284,109 @@ def calcWs(alphas, dataArr, classLabels):
     return w
 
 
-if __name__ == '__main__':
-    dataArr, labelArr = loadDataSet('testSet.txt')
-    # print(labelArr)
-    b, alphas = smoP(dataArr, labelArr, 0.6, 0.001, 40)
-    # print(b)
-    # print(alphas[alphas>0])
-    ws = calcWs(alphas, dataArr, labelArr)
-    # 对数据进行分类
+def testRbf(k1=1.3):
+    dataArr, labelArr = loadDataSet('testSetRBF.txt')
+    b, alphas = smoP(dataArr, labelArr, 200, 0.0001, 10000, ('rbf', k1))
     dataMat = mat(dataArr)
-    print(dataMat[0]*mat(ws)+b)
-    print(labelArr[0])
+    labelMat = mat(labelArr).T
+    svIndex = nonzero(alphas.A>0)[0]
+    SVs = dataMat[svIndex]
+    svLabel = labelMat[svIndex]
+    print("there are %d support vectors" % shape(SVs)[0])
+    m, n = shape(dataMat)
+    errorCount = 0
+    for i in range(m):
+        # 利用 核函数 && 支持向量 进行分类.
+        kernelEval = kernelTrans(SVs, dataMat[i, :], ('rbf', k1))
+        predict = kernelEval.T * multiply(svLabel, alphas[svIndex]) + b
+        if sign(predict) != sign(labelArr[i]):
+            errorCount += 1
+    print("the training error rate is: %f" % (float(errorCount)/m))
+    # 使用训练出来的SVM来对测试集进行分类, 检查错误率
+    dataArr, labelArr = loadDataSet('testSetRBF2.txt')
+    errorCount = 0
+    dataMat = mat(dataArr)
+    labelMat = mat(labelArr).T
+    m, n = shape(dataMat)
+    for i in range(m):
+        kernelEval = kernelTrans(SVs, dataMat[i, :], ('rbf', k1))
+        predict = kernelEval.T * multiply(svLabel, alphas[svIndex]) + b
+        if sign(predict) != sign(labelArr[i]):
+            errorCount += 1
+    print("the test error rate is: %f" % (float(errorCount)/m))
+
+
+# -----------------------  使用 SVM 进行手写数字识别 ---------------------------
+
+def img2vector(filename):
+    vector = zeros((1, 1024))
+    with open(filename) as infile:
+        for lineno, line in enumerate(infile):
+            for rowno in range(32):
+                vector[0, 32 * lineno + rowno] = int(line[rowno])
+        return vector
+
+
+def loadImages(dirName):
+    from os import listdir
+    hwLabels = []
+    trainingFileList = listdir(dirName)
+    m = len(trainingFileList)
+    trainingMat = zeros((m, 1024))
+    for i in range(m):
+        filenameStr = trainingFileList[i]
+        fileStr = filenameStr.split('.')[0]
+        classNumStr = int(fileStr.split('_')[0])
+        if classNumStr == 9:
+            hwLabels.append(-1)
+        else:
+            hwLabels.append(1)
+        trainingMat[i, :] = img2vector('%s/%s' % (dirName, filenameStr))
+        return trainingMat, hwLabels
+
+
+def testDigits(kTup=('rbf', 10)):
+    dataArr, labelArr = loadImages('trainingDigits')
+    b, alphas = smoP(dataArr, labelArr, 200, 0.0001, 10000, kTup)
+    dataMat = mat(dataArr)
+    labelMat = mat(labelArr).T
+    svIndex = nonzero(alphas.A>0)[0]
+    SVs = dataMat[svIndex]
+    svLabel = labelMat[svIndex]
+    print("there are %d support vectors" % shape(SVs)[0])
+    m, n = shape(dataMat)
+    errorCount = 0
+    for i in range(m):
+        # 利用 核函数 && 支持向量 进行分类.
+        kernelEval = kernelTrans(SVs, dataMat[i, :], kTup)
+        predict = kernelEval.T * multiply(svLabel, alphas[svIndex]) + b
+        if sign(predict) != sign(labelArr[i]):
+            errorCount += 1
+    print("the training error rate is: %f" % (float(errorCount)/m))
+    # 使用训练出来的SVM来对测试集进行分类, 检查错误率
+    dataArr, labelArr = loadImages('testDigits')
+    errorCount = 0
+    dataMat = mat(dataArr)
+    labelMat = mat(labelArr).T
+    m, n = shape(dataMat)
+    for i in range(m):
+        kernelEval = kernelTrans(SVs, dataMat[i, :], ('rbf', k1))
+        predict = kernelEval.T * multiply(svLabel, alphas[svIndex]) + b
+        if sign(predict) != sign(labelArr[i]):
+            errorCount += 1
+    print("the test error rate is: %f" % (float(errorCount)/m))
+
+
+if __name__ == '__main__':
+    # dataArr, labelArr = loadDataSet('testSet.txt')
+    # # print(labelArr)
+    # b, alphas = smoP(dataArr, labelArr, 0.6, 0.001, 40)
+    # # print(b)
+    # # print(alphas[alphas>0])
+    # ws = calcWs(alphas, dataArr, labelArr)
+    # # 对数据进行分类
+    # dataMat = mat(dataArr)
+    # print(dataMat[0]*mat(ws)+b)
+    # print(labelArr[0])
+    # testRbf()
+    testDigits(('rbf', 20))
