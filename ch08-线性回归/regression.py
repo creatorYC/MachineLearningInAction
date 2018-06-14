@@ -74,20 +74,64 @@ def lwlrTest(testArr, xArr, yArr, k=1.0):
     return yHat
 
 
+# ------------------------ 预测鲍鱼年龄 ---------------------------
+def rssError(yArr, yHatArr):
+    return ((yArr - yHatArr) ** 2).sum()
+
+
+# 岭回归 计算回归系数
+def ridgeRegression(xMat, yMat, lambd=0.2):
+    xTx = xMat.T * xMat
+    denom = xTx + eye(shape(xMat)[1]) * lambd
+    if linalg.det(denom) == 0.0:
+        print("the matrix can not do inverse.")
+        return
+    ws = denom.I * (xMat.T * yMat)
+    return ws
+
+
+# 在一组lambda上测试结果
+def ridgeTest(xArr, yArr):
+    xMat = mat(xArr)
+    yMat = mat(yArr).T
+    yMean = mean(yMat, 0)   # mean: 求平均值 0：压缩行，求列平均值
+    # 数据标准化处理
+    yMat = yMat - yMean
+    xMeans = mean(xMat, 0)
+    # var(X,W): W可以取0或1：取0求样本方差的无偏估计值(除以N-1)，对应取1求得的是方差(除以N)
+    xVar = var(xMat, 0)
+    xMat = (xMat - xMeans)/xVar
+    numTestPts = 30
+    wMat = zeros((numTestPts, shape(xMat)[1]))
+    for i in range(numTestPts):
+        ws = ridgeRegression(xMat, yMat, exp(i-10))
+        wMat[i, :] = ws.T
+    return wMat
+
+
 if __name__ == '__main__':
-    xArr, yArr = loadDataSet('ex0.txt')
-    ws = standRegres(xArr, yArr)
+    # xArr, yArr = loadDataSet('ex0.txt')
+    # ws = standRegres(xArr, yArr)
     # print(ws)
     # showPlot(xArr, yArr)
-    yHat = lwlrTest(xArr, xArr, yArr, 0.01)
-    xMat = mat(xArr)
-    strInd = xMat[:, 1].argsort(0)
-    xSort = xMat[strInd][:, 0, :]
+
+    # yHat = lwlrTest(xArr, xArr, yArr, 0.01)
+    # xMat = mat(xArr)
+    # strInd = xMat[:, 1].argsort(0)
+    # xSort = xMat[strInd][:, 0, :]
     import matplotlib.pyplot as plt
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.plot(xSort[:, 1], yHat[strInd])
-    ax.scatter(xMat[:, 1].flatten().A[0], mat(yArr).T.flatten().A[0], s=2, c='red')
+    # ax.plot(xSort[:, 1], yHat[strInd])
+    # ax.scatter(xMat[:, 1].flatten().A[0], mat(yArr).T.flatten().A[0], s=2, c='red')
+    # plt.show()
+
+    abX, abY = loadDataSet('abalone.txt')
+    ridgeWeights = ridgeTest(abX, abY)
+    ax.plot(ridgeWeights)
     plt.show()
+
+
+
 
     
