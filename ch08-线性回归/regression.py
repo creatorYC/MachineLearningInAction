@@ -109,6 +109,44 @@ def ridgeTest(xArr, yArr):
     return wMat
 
 
+def regularize(xMat):   # regularize by columns
+    inMat = xMat.copy()
+    inMeans = mean(inMat, 0)   # calc mean then subtract it off
+    inVar = var(inMat, 0)      # calc variance of Xi then divide by it
+    inMat = (inMat - inMeans)/inVar
+    return inMat
+
+
+# 前项逐步线性回归
+def stageWise(xArr, yArr, eps=0.01, numIter=100):
+    xMat = mat(xArr)
+    yMat = mat(yArr).T
+    yMean = mean(yMat, 0)
+    yMat = yMat - yMean
+    xMat = regularize(xMat)
+    m, n = shape(xMat)
+    returnMat = zeros((numIter, n))
+    ws = zeros((n, 1))
+    wsTest = ws.copy()
+    wsMax = ws.copy()
+    for i in range(numIter):
+        print(ws.T)
+        lowestError = inf
+        for j in range(n):
+            for sign in [-1, 1]:
+                wsTest = ws.copy()
+                wsTest[j] += eps * sign
+                yTest = xMat * wsTest
+                rssE = rssError(yMat.A, yTest.A)
+                if rssE < lowestError:
+                    lowestError = rssE
+                    wsMax = wsTest
+        ws = wsMax.copy()
+        returnMat[i, :] = ws.T
+    return returnMat
+
+
+
 if __name__ == '__main__':
     # xArr, yArr = loadDataSet('ex0.txt')
     # ws = standRegres(xArr, yArr)
@@ -127,9 +165,11 @@ if __name__ == '__main__':
     # plt.show()
 
     abX, abY = loadDataSet('abalone.txt')
-    ridgeWeights = ridgeTest(abX, abY)
-    ax.plot(ridgeWeights)
-    plt.show()
+    # ridgeWeights = ridgeTest(abX, abY)
+    # ax.plot(ridgeWeights)
+    # plt.show()
+
+    stageWise(abX, abY, 0.01, 200)
 
 
 
