@@ -72,8 +72,54 @@ def createTree(dataSet, leafType=regLeaf, errType=regErr, ops=(1, 4)):
     return retTree
 
 
+def isTree(obj):
+    return (type(obj).__name__ == 'dict')
+
+
+def  getMean(tree):
+    if isTree(tree['right']):
+        tree['right'] = getMean(tree['right'])
+    if isTree(tree['left']):
+        tree['left'] = getMean(tree['left'])
+    return (tree['left']+tree['right']) / 2.0
+
+
+# 回归树剪枝
+def prune(tree, testData):
+    # 没有数据时对树进行塌陷处理(即返回树平均值)
+    if shape(testData)[0] == 0:
+        return getMean(tree)
+    if (isTree(tree['right']) or isTree(tree['left'])):
+        lSet, rSet = binSplitDataSet(testData, tree['spIdx'], tree['spVal'])
+        if isTree(tree['right']):
+            tree['right'] = prune(tree['right'], rSet)
+        if isTree(tree['left']):
+            tree['left'] = prune(tree['left'], lSet)
+    if not isTree(tree['right']) and not isTree(tree['left']):
+        lSet, rSet = binSplitDataSet(testData, tree['spIdx'], tree['spVal'])
+        errorNoMerge = sum(power(lSet[:, -1]-tree['left'], 2)) + \
+                        sum(power(rSet[:, -1]-tree['right'], 2))
+        treeMean = (tree['left'] + tree['right']) / 2.0
+        errorMerge = sum(power(testData[:, -1] - treeMean, 2))
+        if errorMerge < errorNoMerge:
+            print("merging")
+            return treeMean
+        else:
+            return tree
+    else:
+        return tree
+
+
+
 if __name__ == '__main__':
-    myData = loadDataSet('ex0.txt')
-    myMat = mat(myData)
-    retTree = createTree(myMat)
-    print(retTree)
+    # myData = loadDataSet('ex0.txt')
+    # myMat = mat(myData)
+    # retTree = createTree(myMat)
+    # print(retTree)
+    myData2 = loadDataSet('ex2.txt')
+    myMat2 = mat(myData2)
+    myTree = createTree(myMat2, ops=(0, 1))
+    myTestData = loadDataSet('ex2test.txt')
+    myTestMat = mat(myTestData)
+    tree = prune(myTree, myTestMat)
+    print(tree)
