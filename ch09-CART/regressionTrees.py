@@ -138,12 +138,60 @@ def modelErr(dataSet):
     return sum(power(Y-yHat, 2))
 
 
+def regTreeEval(model, inData):
+    return float(model)
+
+
+def modelTreeEval(model, inData):
+    n = shape(inData)[1]
+    X = mat(ones((1, n+1)))
+    X[:, 1:n+1] = inData
+    return float(X*model)
+
+
+# 用树回归进行预测
+def treeForeCast(tree, inData, modelEval=regTreeEval):
+    if not isTree(tree):
+        return modelEval(tree, inData)
+    if inData[tree['spIdx']] > tree['spVal']:
+        if isTree(tree['left']):
+            return treeForeCast(tree['left'], inData, modelEval)
+        else:
+            return modelEval(tree['left'], inData)
+    else:
+        if isTree(tree['right']):
+            return treeForeCast(tree['right'], inData, modelEval)
+        else:
+            return modelEval(tree['right'], inData)
+
+
+def createForeCast(tree, testData, modelEval=regTreeEval):
+    m = len(testData)
+    yHat = mat(zeros((m, 1)))
+    for i in range(m):
+        yHat[i, 0] = treeForeCast(tree, mat(testData[i]), modelEval)
+    return yHat
+
+
 if __name__ == '__main__':
     # myData = loadDataSet('ex0.txt')
     # myMat = mat(myData)
     # retTree = createTree(myMat)
     # print(retTree)
-    myData2 = loadDataSet('exp2.txt')
-    myMat2 = mat(myData2)
-    myTree = createTree(myMat2, modelLeaf, modelErr, ops=(1, 10))
-    print(myTree)
+    # myData2 = loadDataSet('exp2.txt')
+    # myMat2 = mat(myData2)
+    # myTree = createTree(myMat2, modelLeaf, modelErr, ops=(1, 10))
+    # print(myTree)
+
+    # ----------- 创建回归树 ---------------
+    # corrcoef: 相关系数
+    trainMat = mat(loadDataSet('bikeSpeedVsIq_train.txt'))
+    testMat = mat(loadDataSet('bikeSpeedVsIq_test.txt'))
+    myTree = createTree(trainMat, ops=(1, 20))
+    yHat = createForeCast(myTree, testMat[:, 0])
+    print(corrcoef(yHat, testMat[:, 1], rowvar=0)[0, 1])
+
+    # ----------- 创建模型树 ---------------
+    myTree = createTree(trainMat, modelLeaf, modelErr, (1, 20))
+    yHat = createForeCast(myTree, testMat[:, 0], modelTreeEval)
+    print(corrcoef(yHat, testMat[:, 1], rowvar=0)[0, 1])
