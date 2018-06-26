@@ -110,16 +110,40 @@ def prune(tree, testData):
         return tree
 
 
+# 模型树的叶节点生成函数
+def linearSolve(dataSet):
+    m, n = shape(dataSet)
+    # 格式化X，Y中的数据
+    X = mat(ones((m, n)))
+    Y = mat(ones((m, 1)))
+    X[:, 1:n] = dataSet[:, 0:n-1]
+    Y = dataSet[:, -1]
+    xTx = X.T * X
+    if linalg.det(xTx) == 0.0:
+        raise NameError("this matrix can not do inverse, try incresing the second value of ops.")
+    ws = xTx.I * (X.T * Y)  # 线性回归
+    return ws, X, Y
+
+
+# 数据不再切分时生成叶节点
+def modelLeaf(dataSet):
+    ws, X, Y = linearSolve(dataSet)
+    return ws
+
+
+# 在给定的数据集上计算误差
+def modelErr(dataSet):
+    ws, X, Y = linearSolve(dataSet)
+    yHat = X * ws
+    return sum(power(Y-yHat, 2))
+
 
 if __name__ == '__main__':
     # myData = loadDataSet('ex0.txt')
     # myMat = mat(myData)
     # retTree = createTree(myMat)
     # print(retTree)
-    myData2 = loadDataSet('ex2.txt')
+    myData2 = loadDataSet('exp2.txt')
     myMat2 = mat(myData2)
-    myTree = createTree(myMat2, ops=(0, 1))
-    myTestData = loadDataSet('ex2test.txt')
-    myTestMat = mat(myTestData)
-    tree = prune(myTree, myTestMat)
-    print(tree)
+    myTree = createTree(myMat2, modelLeaf, modelErr, ops=(1, 10))
+    print(myTree)
