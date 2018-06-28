@@ -90,10 +90,56 @@ def biKmeans(dataSet, k, distMeans=distEclud):
         print("the bestCenToSplit is: ", bestCentToSlit)
         print("the len of bestClusAssement is: ", len(bestClusAssment))
         # 更新簇的分配结果
-        cenList[bestCentToSlit] = bestNewCents[0, :]
-        cenList.append(bestNewCents[1, :])
+        cenList[bestCentToSlit] = bestNewCents[0, :].tolist()[0]
+        cenList.append(bestNewCents[1, :].tolist()[0])
         clusterAssment[nonzero(clusterAssment[:, 0].A==bestCentToSlit)[0], :] = bestClusAssment
-    return cenList, clusterAssment
+    return mat(cenList), clusterAssment
+
+
+# 球面距离计算
+def distSLC(vecA, vecB):
+    a = sin(vecA[0, 1]*pi/180) * sin(vecB[0, 1]*pi/180)
+    b = cos(vecA[0, 1]*pi/180) * cos(vecB[0, 1]*pi/180) * cos(pi*(vecB[0, 0]-vecA[0, 0])/180)
+    return arccos(a+b)*6371.0
+
+
+import matplotlib
+import matplotlib.pyplot as plt
+
+
+# 簇绘图函数
+def clusterClubs(numCluster=5):
+    dataList = []
+    for line in open('places.txt').readlines():
+        lineArr = line.split('\t')
+        dataList.append([float(lineArr[4]), float(lineArr[3])])
+    dataMat = mat(dataList)
+    centroids, clusterAssment = biKmeans(dataMat, numCluster, distMeans=distSLC)
+    fig = plt.figure()
+    rect = [0.1, 0.1, 0.8, 0.8]
+    scatterMarkers = ['s', 'o', '^', '8', 'p', 'd', 'v', 'h', '>', '<']
+    axprops = dict(xticks=[], yticks=[])
+    ax0 = fig.add_axes(rect, label='ax0', **axprops)
+    imgP = plt.imread('Portland.png')   # 基于图像创建矩阵
+    ax0.imshow(imgP)
+
+    ax1 = fig.add_axes(rect, label='ax1', frameon=False)
+    for i in range(numCluster):
+        ptsInCurrCluster = dataMat[nonzero(clusterAssment[:, 0].A==i)[0], :]
+        markerStyle = scatterMarkers[i % len(scatterMarkers)]
+        ax1.scatter(
+            ptsInCurrCluster[:, 0].flatten().A[0], 
+            ptsInCurrCluster[:, 1].flatten().A[0],
+            marker=markerStyle,
+            s=90
+        )
+    ax1.scatter(
+        centroids[:, 0].flatten().A[0],
+        centroids[:, 1].flatten().A[0],
+        marker='+',
+        s=300
+    )
+    plt.show()
 
 
 if __name__ == '__main__':
@@ -102,6 +148,7 @@ if __name__ == '__main__':
     # print(distEclud(dataMat[0], dataMat[1]))
     # centriods, clusterAssment = kMeans(dataMat, 4)
 
-    dataMat2 = mat(loadDataSet('testSet2.txt'))
-    centList, newAssment = biKmeans(dataMat2, 3)
-    print(centList)
+    # dataMat2 = mat(loadDataSet('testSet2.txt'))
+    # centList, newAssment = biKmeans(dataMat2, 3)
+    # print(centList)
+    clusterClubs(5)
