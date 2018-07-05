@@ -37,9 +37,42 @@ def scanD(D, Ck, minSupport):
     return retList, supportData
 
 
-if __name__ == '__main__':
-    dataSet = loadDataSet()
+# 生成包含k个元素的候选项集列表
+def aprioriGen(Lk, k):  # 频繁项集列表、项集元素个数
+    retList = []
+    lenLk = len(Lk)
+    for i in range(lenLk):
+        for j in range(i+1, lenLk):
+            L1 = list(Lk[i])[:k-2]
+            L2 = list(Lk[j])[:k-2]
+            L1.sort()
+            L2.sort()
+            if L1 == L2:    # 前k-2项相同则合并集合
+                retList.append(Lk[i] | Lk[j])
+    return retList
+
+
+# 生成候选项集列表
+def apriori(dataSet, minSupport=0.5):
     C1 = createC1(dataSet)
     D = list(map(set, dataSet))
-    L1, supportData = scanD(D, C1, 0.5)
-    print(L1)
+    L1, supportData = scanD(D, C1, minSupport)
+    L = [L1]
+    k = 2
+    while len(L[k-2]) > 0:
+        Ck = aprioriGen(L[k-2], k)
+        Lk, supK = scanD(D, Ck, minSupport)
+        supportData.update(supK)
+        L.append(Lk)
+        k += 1
+    return L, supportData
+
+
+if __name__ == '__main__':
+    dataSet = loadDataSet()
+    # C1 = createC1(dataSet)
+    # D = list(map(set, dataSet))
+    # L1, supportData = scanD(D, C1, 0.5)
+    # print(L1)
+    L, supportData = apriori(dataSet)
+    print(L)
