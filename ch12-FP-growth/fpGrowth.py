@@ -92,8 +92,44 @@ def createInitSet(dataSet):
     return retDict
 
 
+# 迭代上溯整棵树
+def ascendTree(leafNode, prefixPath):
+    if leafNode.parent != None:
+        prefixPath.append(leafNode.name)
+        ascendTree(leafNode.parent, prefixPath)
+
+
+# 发现以给定元素项结尾的所有路径函数
+def findPrefixPath(basePat, treeNode):
+    condPats = {}
+    while treeNode != None:
+        prefixPath = []
+        ascendTree(treeNode, prefixPath)
+        if len(prefixPath) > 1:
+            condPats[frozenset(prefixPath[1:])] = treeNode.count
+        treeNode = treeNode.nodeLink
+    return condPats
+
+
+# 递归查找频繁项集的函数
+def mineTree(inTree, headerTable, minSup, preFix, freqItemList):
+    bigL = [v[0] for v in sorted(headerTable.items(), key=lambda p : p[1])]
+    for basePat in bigL:
+        newFreqSet = preFix.copy()
+        newFreqSet.add(basePat)
+        freqItemList.append(newFreqSet)
+        condPattBases = findPrefixPath(basePat, headerTable[basePat][1])
+        myCondTree, myHead = createTree(condPattBases, minSup)
+        if myHead != None:
+            print('conditional tree for: ', newFreqSet)
+            myCondTree.display(1)
+            mineTree(myCondTree, myHead, minSup, newFreqSet, freqItemList)
+
+
 if __name__ == '__main__':
     simpData = loadSimpleData()
     initSet = createInitSet(simpData)
     myFPTree, myHeaderTable = createTree(initSet, 3)
-    myFPTree.display()
+    # myFPTree.display()
+    freqItems = []
+    mineTree(myFPTree, myHeaderTable, 3, set([]), freqItems)
